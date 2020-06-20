@@ -4,29 +4,33 @@
 #include <math.h>
 
 //TODO: fix segfault on 2 parents (should fix random cutting of last char
-const char goal[]="hello wsapones";
+const char goal[]="haha benis this is very long see if you can do this one";
 #define MUTATIONS_PER_10K 500
 #define MAX_MUTATIONS 1
 #define POPULATION_SIZE 1000
 #define GENOME_SIZE strlen(goal)
 #define MAX_GENERATIONS 1000
-#define PARENTS 5
-#define ZERO_CHANCE 0.002
+#define NUM_PARENTS 10
+#define ZERO_CHANCE 0.0001
 
-int dist_from_str(const char* str1, const char* str2){
+int count_same_chars(const char* str1, const char* str2){
     int i;
-    int dist=0;
+    int n=0;
+    if(strlen(str1)!=strlen(str2)){
+        printf("count_same_chars: Strings have different lengths (str1:%ld, str1:%ld, GENOME_SIZE:%d).\n",strlen(str1),strlen(str2),GENOME_SIZE);
+        exit(1);
+    }
     for(i=0;i<strlen(str1);i++){
         if(str1[i]==str2[i]){
-            dist++;
+            n++;
         }
     }
-    return dist;
+    return n;
 }
 
 //This is the score function
-float score(const char* s){
-    return ((float)dist_from_str(s,goal)/GENOME_SIZE);
+double score(const char* s){
+    return ((double)count_same_chars(s,goal)/GENOME_SIZE);
 }
 
 char random_gene(){
@@ -35,14 +39,12 @@ char random_gene(){
 
 //mutates a random gene to another (' '-'z')
 void mutate(char** p){
-    int m,j,i;
-    for(i=0;i<POPULATION_SIZE;i++){
-        m=rand()%MAX_MUTATIONS+1;
+    int n,m,j,i;
+    n=rand()%POPULATION_SIZE*MUTATIONS_PER_10K/10000;//how many genomes to mutate
+    for(i=0;i<n;i++){
+        m=rand()%MAX_MUTATIONS+1;//how many genes to mutate
         for(j=0;j<m;j++){
-            if(rand()%10000<=MUTATIONS_PER_10K){
-                p[i][rand()%GENOME_SIZE]=random_gene();
-                //printf("mutated %4d\n",i);
-            }
+            p[i][rand()%GENOME_SIZE]=random_gene();
         }
     }
 }
@@ -54,23 +56,25 @@ void init(char** p){
         for(j=0;j<GENOME_SIZE;j++){//this loop should be a generator function
             p[i][j]=random_gene();
         }
+        p[i][GENOME_SIZE]='\0';
     }
 }
 
+//prints n genomes randomly sampled from p
 void print_sample(char** p,int n){
     int index;
     for(;n>=0;n--){
         index=rand()%POPULATION_SIZE;
-        printf("%d %s: %.3f\n",index,p[index],score(p[index]));
+        printf("%6d: %s (%.3f)\n",index,p[index],score(p[index]));
     }
 }
 
-//selection
-int eugenics(char** p,float* s){
+// Fills s with the score of each genome and returns the sum of all scores.
+int generate_score_array(char** p,double* s){
     int i;
-    float sum=0;
-    float max=0;
-    int maxi;
+    double sum=0;//total score
+    double max=0;//best genome score
+    int maxi;//index of max
     for(i=0;i<POPULATION_SIZE;i++){
         s[i]=score(p[i]);
         sum+=s[i];
@@ -79,17 +83,17 @@ int eugenics(char** p,float* s){
             maxi=i;
         }
     }
-    printf("Best: %s: %.3f\n",p[maxi],max);
+    printf("Best Genome\n%6d: %s (%.3f)\n",maxi,p[maxi],max);
     return sum;
 }
 
-//chooses an index of population randomly with more chance the higher its score
-int choose_parent(float* s,float tot){
+// Chooses an index of population randomly with more chance the higher its score
+int choose_parent(double* s,double tot){
     int i,k;
-    float r,p;
+    double r,p;
     do{
         k=rand()%POPULATION_SIZE;
-        r=(float)(rand()%100000)/100000;
+        r=(double)(rand()%100000)/100000;
         p=s[k]/tot+ZERO_CHANCE;
     }
     while(r>p);
@@ -99,56 +103,49 @@ int choose_parent(float* s,float tot){
 
 void random_shuffle(int* l,int size){
     int i,r1,r2,t;
-
-    for(i=0;i<100;i++){
+    // for(i=0;i<size;i++){
+    //     printf("%2d ",l[i]);
+    // }
+    for(i=0;i<GENOME_SIZE*2;i++){
         r1=rand()%size;
         r2=rand()%size;
         t=l[r1];
         l[r1]=l[r2];
         l[r2]=t;
     }
+    // printf(" --> ");
+    // for(i=0;i<size;i++){
+    //     printf("%2d ",l[i]);
+    // }
+    // printf("\n");
 }
 
-void crossover(char** p,float* s,float tot){
-    int i,j,k,c;
+void crossover(char** p,char** new_population,int* unique_randoms,double* s,double tot){
+    int i,j,parent_index,c;
     int start=0;
     int end;
-    
-    int* list;
-    list=(int*)malloc(GENOME_SIZE*sizeof(int));
-    for(i=0;i<GENOME_SIZE;i++){
-        list[i]=i;
-    }
-   
-    char** new_population;
-    new_population=(char**)malloc(POPULATION_SIZE*sizeof(char*));
-    for(i=0;i<POPULATION_SIZE;i++){
-        new_population[i]=(char*)malloc(GENOME_SIZE*sizeof(char));
-    }
-    
-    for(i=0;i<POPULATION_SIZE;i++){
-        random_shuffle(list,GENOME_SIZE);
-        for(j=0;j<PARENTS;j++){
-            k=choose_parent(s,tot);
-            end=start+GENOME_SIZE/PARENTS;
-            for(c=start;c<=end;c++){
-                new_population[i][list[c]]=p[k][list[c]];
+
+    for(i=0;i<POPULATION_SIZE;i++){//for each genome
+        random_shuffle(unique_randoms,GENOME_SIZE);//make a list of unique randoms from 0 to GENOME_SIZE-1
+        for(j=1;j<=NUM_PARENTS;j++){//for each parent
+            parent_index=choose_parent(s,tot);
+            end=start+GENOME_SIZE/NUM_PARENTS-1;
+            for(c=start;c<end;c++){
+                new_population[i][unique_randoms[c]]=p[parent_index][unique_randoms[c]];
             }
             start=end;
         }
-        k=choose_parent(s,tot);
-        
+        //keep going on the last parent until you make a full genome
         for(c=start;c<GENOME_SIZE;c++){
-           new_population[i][list[c]]=p[k][list[c]];
+            new_population[i][unique_randoms[c]]=p[parent_index][unique_randoms[c]];
         }
-        
         start=0;
-        p[i][end+1]='\0';
+        p[i][GENOME_SIZE]='\0';
     }
-    
+
     //move new population to the old one
     for(i=0;i<POPULATION_SIZE;i++){
-        *(p+i)=*(new_population+i);
+        p[i]=new_population[i];
     }
 }
 
@@ -156,27 +153,33 @@ int main(){
     time_t t;
     srand((unsigned) time(&t));
 
-    float total_score;
+    double total_score;
     int i;
-    
+
     char* st1;
     st1=(char*)malloc(GENOME_SIZE*sizeof(char));
-    
+
     char** population;
     population=(char**)malloc(POPULATION_SIZE*sizeof(char*));
     for(i=0;i<POPULATION_SIZE;i++){
         population[i]=(char*)malloc(GENOME_SIZE*sizeof(char));
     }
 
-    char** survivors;
-    survivors=(char**)malloc(POPULATION_SIZE*sizeof(char*));
+    char** new_population;
+    new_population=(char**)malloc(POPULATION_SIZE*sizeof(char*));
     for(i=0;i<POPULATION_SIZE;i++){
-        survivors[i]=(char*)malloc(GENOME_SIZE*sizeof(char));
+        new_population[i]=(char*)malloc(GENOME_SIZE*sizeof(char));
     }
-    
-    float* scores;
-    scores=(float*)malloc(POPULATION_SIZE*sizeof(float));
-    
+
+    int* unique_randoms;
+    unique_randoms=(int*)malloc(GENOME_SIZE*sizeof(int));
+    for(i=0;i<GENOME_SIZE;i++){
+        unique_randoms[i]=i;
+    }
+
+    double* scores;
+    scores=(double*)malloc(POPULATION_SIZE*sizeof(double));
+
     //initialization
     init(population);
     //print_sample(population,10);
@@ -185,16 +188,14 @@ int main(){
     print_sample(population,9);
     //loop over generations
     for(i=0;i<MAX_GENERATIONS;i++){
-        total_score=eugenics(population,scores);
-        crossover(population,scores,total_score);
+        total_score=generate_score_array(population,scores);
+        crossover(population,new_population,unique_randoms,scores,total_score);
         if(i%1==0){
             printf("Gen %d: %.3f average\n",i,total_score/POPULATION_SIZE);
-            printf("Generation %5d preview:\n",i);
-            print_sample(population,9);
+            //printf("Generation %5d preview:\n",i);
+            //print_sample(population,9);
         }
         mutate(population);
-       
     }
     return 0;
 }
-    

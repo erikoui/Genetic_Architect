@@ -4,6 +4,7 @@
 #include <cmath>
 #include <random>
 #include <string>
+#include <map>
 
 /************************************CONSTANTS*********************************/
 const bool VERBOSE=true;//Set to true to print debug info
@@ -14,7 +15,7 @@ const int UPDATE_INTERVAL=10;//how many generations between printing stats
 #define POPULATION_SIZE 1000
 #define MAX_GENERATIONS 1000
 #define NUM_PARENTS 10
-#define ZERO_CHANCE 0.0001
+#define ZERO_CHANCE 0.000
 
 #define ROOM_TYPE_CHANGES 0
 
@@ -42,6 +43,8 @@ std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
 std::uniform_real_distribution<> rand_uni(0, 1);
 std::normal_distribution<> rand_norm(0,1);
 int GENOME_SIZE;
+std::map<char,double> mean_aspect;
+std::map<char,double> std_aspect;
 /******************************************************************************/
 
 /*****************************DATA STRUCTURES**********************************/
@@ -275,6 +278,28 @@ void init(){
     std::cout<<"CFG_TYPES initialized to "<<str<<std::endl;
   }
   GENOME_SIZE=CFG_TYPES.size();
+
+  //'B','M','K','S','L','C','U','O','W','T'
+  mean_aspect['B']=1;
+  std_aspect['B']=0.3;
+  mean_aspect['M']=1;
+  std_aspect['M']=0.3;
+  mean_aspect['K']=0.83;
+  std_aspect['K']=0.5;
+  mean_aspect['S']=0.5;
+  std_aspect['S']=1;
+  mean_aspect['L']=0.8;
+  std_aspect['L']=0.5;
+  mean_aspect['C']=1;
+  std_aspect['C']=3;
+  mean_aspect['U']=1;
+  std_aspect['U']=3;
+  mean_aspect['O']=1;
+  std_aspect['O']=1;
+  mean_aspect['W']=3;
+  std_aspect['W']=10;
+  mean_aspect['T']=1;
+  std_aspect['T']=0.2;
 }
 
 //generates a population
@@ -295,12 +320,35 @@ void generate_population(Population& p){
 }
 
 //This is the score function
-double score(Genome& s){
+double score(Genome& g){
+  double score=0;
+    //Room aspect ratio increases score as it reaches a constant (propose 1.1)
+  double room_aspect,z_aspect;
+  int i;
+  for(i=0;i<GENOME_SIZE;i++){
+    if(g.genome[i].width<g.genome[i].height){
+      room_aspect=g.genome[i].width/g.genome[i].height;
+    }else{
+      room_aspect=g.genome[i].height/g.genome[i].width;
+    }
+    //Calculate the z-score of this aspect ratio (assuming normdist)
+    double m=mean_aspect[g.genome[i].use];
+    double s=std_aspect[g.genome[i].use];
+    z_aspect=(room_aspect-m)/s+1;//x of normdist graph
+    z_aspect=z_aspect*exp(-0.5*((z_aspect-m)/s)*((z_aspect-m)/s));//y
+    if(VERBOSE){
+      //std::cout<<"Room  ("<<g.genome[i].use<<") aspect: "<<room_aspect<<" (z="<<z_aspect<<")"<<std::endl;
+    }
+    score+=z_aspect;
+  }
+  score/=GENOME_SIZE;//normalize so that final score max=1
+
   //Bedroom area increases score up to a point
-  //Room aspect ratio increases score as it reaches a constant (propose 1.1)
   //Walkway area decreases score
   //more MORE MOOOOOOOOOOARRRRRRRRRRRR
-  return 1;
+  // dont forget to score/=num_of_criteria;
+  score/=1;
+  return score;
 }
 
 //The entire mutation step for the whole population
@@ -315,15 +363,20 @@ void mutate(Population& p){
   }
 }
 
-// Fills s with the score of each genome and returns the sum of all scores.
-int generate_score_array(Population& p,std::vector<double>& s){
+// Fills s with the score of each genome, c_s with the cumulative score
+// and returns the sum of all scores.
+int generate_score_array(Population& p,std::vector<double>& s,std::vector<double>& c_s){
   int i;
   double sum=0;//total score
   double max=0;//best genome score
   int maxi;//index of max
   for(i=0;i<p.population.size();i++){
     s[i]=score(p.population[i]);
+    if(VERBOSE){
+      //std::cout<<s[i]<<std::endl;
+    }
     sum+=s[i];
+    c_s[i]=sum;
     if(s[i]>max){
       max=s[i];
       maxi=i;
@@ -336,24 +389,26 @@ int generate_score_array(Population& p,std::vector<double>& s){
 }
 
 // Chooses an index of population randomly with more chance the higher its score
-int choose_parent(std::vector<double>& s,double tot){
-  int i,k;
-  double r,p;
-  do{
-    k=std::floor(unidist(POPULATION_SIZE));
-    r=unidist(100000);
-    p=s[k]/tot+ZERO_CHANCE;
-  }
-  while(r>p);
+int choose_parent(std::vector<double>& c_s,double tot){
+  int i,k,count=0;
+  double r,p=2;
+  r=unidist(tot);
 
-  if(VERBOSE){
-    printf("Chose parent %d with score %.5f (r=%.5f,p=%.5f)\n",k,s[k],r,p);
+  for(i=0;i<c_s.size();i++){
+    if(c_s[i]>=r){
+      break;
+    }
   }
-  return k;
+  if(VERBOSE){
+    //printf("Chose parent %d with cum score %.5f (r=%.5f,p=%.5f)\n",i,c_s[i],r,p);
+  }
+  return i;
 }
 
 
-void crossover(Population& p,Population& new_population,std::vector<int>& unique_randoms,std::vector<double>& s,double tot){
+void crossover(Population& p,Population& new_population,
+          std::vector<int>& unique_randoms,std::vector<double>& s,
+          std::vector<double>& c_s,double tot){
   int i,j,parent_index,c;
   int start=0;
   int end;
@@ -362,7 +417,7 @@ void crossover(Population& p,Population& new_population,std::vector<int>& unique
   for(i=0;i<p.population.size();i++){//for each genome
     random_shuffle(unique_randoms);//make a list of unique randoms from 0 to GENOME_SIZE-1
     for(j=1;j<=NUM_PARENTS;j++){//for each parent
-      parent_index=choose_parent(s,tot);
+      parent_index=choose_parent(c_s,tot);
       end=start+GENOME_SIZE/NUM_PARENTS-1;
       for(c=start;c<end;c++){
         new_population.population[i].genome[unique_randoms[c]]=p.population[parent_index].genome[unique_randoms[c]];
@@ -383,7 +438,7 @@ void crossover(Population& p,Population& new_population,std::vector<int>& unique
 
 void run_GA(Population p){
   Population new_population;
-  std::vector<double> scores;
+  std::vector<double> scores,cumulative_scores;
   std::vector<int> unique_randoms;
 
   double total_score;
@@ -391,6 +446,7 @@ void run_GA(Population p){
 
   new_population.population.resize(p.population.size());
   scores.resize(p.population.size());
+  cumulative_scores.resize(p.population.size());
   unique_randoms.resize(p.population.size());
 
   if(VERBOSE){
@@ -398,8 +454,8 @@ void run_GA(Population p){
   }
 
   for(i=0;i<MAX_GENERATIONS;i++){
-    total_score=generate_score_array(p,scores);
-    crossover(p,new_population,unique_randoms,scores,total_score);
+    total_score=generate_score_array(p,scores,cumulative_scores);
+    crossover(p,new_population,unique_randoms,scores,cumulative_scores,total_score);
     mutate(p);
     if(VERBOSE){
       if(i%UPDATE_INTERVAL==0){

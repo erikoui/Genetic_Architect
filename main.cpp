@@ -6,7 +6,7 @@
 #include <string>
 
 /************************************CONSTANTS*********************************/
-const bool VERBOSE=false;//Set to true to print debug info
+const bool VERBOSE=true;//Set to true to print debug info
 const int UPDATE_INTERVAL=10;//how many generations between printing stats
 
 #define MUTATIONS_PER_10K 500
@@ -225,9 +225,6 @@ double random_dim(char use){
 }
 
 void randomize_gene(Gene& g){
-  if(VERBOSE){
-    std::cout<<"Randomizing Gene..."<<std::endl;
-  }
   //genes are essentially room definitions.
   if(ROOM_TYPE_CHANGES){
     g.use=USE_OPTS[rand()%(USE_OPTS_SIZE)];
@@ -324,7 +321,7 @@ int generate_score_array(Population& p,std::vector<double>& s){
   double sum=0;//total score
   double max=0;//best genome score
   int maxi;//index of max
-  for(i=0;i<POPULATION_SIZE;i++){
+  for(i=0;i<p.population.size();i++){
     s[i]=score(p.population[i]);
     sum+=s[i];
     if(s[i]>max){
@@ -355,60 +352,65 @@ int choose_parent(std::vector<double>& s,double tot){
   return k;
 }
 
-//TODO: fix segfault in this
-void run_GA(Population population){
-  std::vector<Gene> new_population;
-  std::vector<double> scores;
-  std::vector<int> unique_randoms;
-  double total_score;
-  int i;
 
-  for(i=0;i<MAX_GENERATIONS;i++){
-    total_score=generate_score_array(population,scores);
-    //crossover(population,new_population,unique_randoms,scores,total_score);
-    mutate(population);
-
-    if(VERBOSE){
-      if(i%UPDATE_INTERVAL==0){
-        printf("Gen %d: %.3f average\n",i,total_score/POPULATION_SIZE);
-        printf("Generation %5d preview:\n",i);
-        print_sample(population,9);
-      }
-    }
-  }
-}
-
-/*TODO: rewrite this in c++****************************************************
-void crossover(struct gene*** p,struct gene*** new_population,int* unique_randoms,double* s,double tot){
+void crossover(Population& p,Population& new_population,std::vector<int>& unique_randoms,std::vector<double>& s,double tot){
   int i,j,parent_index,c;
   int start=0;
   int end;
 
   //printf("Started Crossover.\n");
-  for(i=0;i<POPULATION_SIZE;i++){//for each genome
-    random_shuffle(unique_randoms,GENOME_SIZE);//make a list of unique randoms from 0 to GENOME_SIZE-1
+  for(i=0;i<p.population.size();i++){//for each genome
+    random_shuffle(unique_randoms);//make a list of unique randoms from 0 to GENOME_SIZE-1
     for(j=1;j<=NUM_PARENTS;j++){//for each parent
       parent_index=choose_parent(s,tot);
       end=start+GENOME_SIZE/NUM_PARENTS-1;
       for(c=start;c<end;c++){
-        new_population[i][unique_randoms[c]]=p[parent_index][unique_randoms[c]];
+        new_population.population[i].genome[unique_randoms[c]]=p.population[parent_index].genome[unique_randoms[c]];
       }
       start=end;
     }
     //keep going on the last parent until you make a full genome
     for(c=start;c<GENOME_SIZE;c++){
-      new_population[i][unique_randoms[c]]=p[parent_index][unique_randoms[c]];
+      new_population.population[i].genome[unique_randoms[c]]=p.population[parent_index].genome[unique_randoms[c]];
     }
     start=0;
-    p[i][GENOME_SIZE]='\0';
   }
 
   //move new population to the old one
-  for(i=0;i<POPULATION_SIZE;i++){
-    p[i]=new_population[i];
+  p.population.swap(new_population.population);
+}
+
+
+void run_GA(Population p){
+  Population new_population;
+  std::vector<double> scores;
+  std::vector<int> unique_randoms;
+
+  double total_score;
+  int i;
+
+  new_population.population.resize(p.population.size());
+  scores.resize(p.population.size());
+  unique_randoms.resize(p.population.size());
+
+  if(VERBOSE){
+    std::cout<<"Running GA..."<<std::endl;
+  }
+
+  for(i=0;i<MAX_GENERATIONS;i++){
+    total_score=generate_score_array(p,scores);
+    crossover(p,new_population,unique_randoms,scores,total_score);
+    mutate(p);
+    if(VERBOSE){
+      if(i%UPDATE_INTERVAL==0){
+        printf("Gen %d: %.3f average\n",i,total_score/POPULATION_SIZE);
+        printf("Generation %5d preview:\n",i);
+        print_sample(p,9);
+      }
+    }
   }
 }
-*/
+
 
 int main(){
   init();

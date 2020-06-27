@@ -6,6 +6,8 @@
 #include <string>
 #include <map>
 
+//TODO: Score function needs more criteria
+
 /************************************CONSTANTS*********************************/
 const bool VERBOSE=true;//Set to true to print debug info
 const int UPDATE_INTERVAL=10;//how many generations between printing stats
@@ -13,8 +15,8 @@ const int UPDATE_INTERVAL=10;//how many generations between printing stats
 #define MUTATIONS_PER_10K 500
 #define MAX_MUTATIONS 1
 #define POPULATION_SIZE 1000
-#define MAX_GENERATIONS 1000
-#define NUM_PARENTS 10
+#define MAX_GENERATIONS 100
+#define NUM_PARENTS 3
 #define ZERO_CHANCE 0.000
 
 #define ROOM_TYPE_CHANGES 0
@@ -372,9 +374,7 @@ int generate_score_array(Population& p,std::vector<double>& s,std::vector<double
   int maxi;//index of max
   for(i=0;i<p.population.size();i++){
     s[i]=score(p.population[i]);
-    if(VERBOSE){
-      //std::cout<<s[i]<<std::endl;
-    }
+
     sum+=s[i];
     c_s[i]=sum;
     if(s[i]>max){
@@ -399,12 +399,8 @@ int choose_parent(std::vector<double>& c_s,double tot){
       break;
     }
   }
-  if(VERBOSE){
-    //printf("Chose parent %d with cum score %.5f (r=%.5f,p=%.5f)\n",i,c_s[i],r,p);
-  }
   return i;
 }
-
 
 void crossover(Population& p,Population& new_population,
           std::vector<int>& unique_randoms,std::vector<double>& s,
@@ -413,21 +409,26 @@ void crossover(Population& p,Population& new_population,
   int start=0;
   int end;
 
-  //printf("Started Crossover.\n");
   for(i=0;i<p.population.size();i++){//for each genome
     random_shuffle(unique_randoms);//make a list of unique randoms from 0 to GENOME_SIZE-1
     for(j=1;j<=NUM_PARENTS;j++){//for each parent
       parent_index=choose_parent(c_s,tot);
-      end=start+GENOME_SIZE/NUM_PARENTS-1;
+      //std::cout<<"Parent "<<j<<" ("<<parent_index<<"): "<<std::endl;
+      //print_genome(p.population[parent_index]);
+      end=start+GENOME_SIZE/NUM_PARENTS;
       for(c=start;c<end;c++){
+        //std::cout<<unique_randoms[c]<<" ";
         new_population.population[i].genome[unique_randoms[c]]=p.population[parent_index].genome[unique_randoms[c]];
       }
       start=end;
     }
     //keep going on the last parent until you make a full genome
     for(c=start;c<GENOME_SIZE;c++){
+      //std::cout<<unique_randoms[c]<<" ";
       new_population.population[i].genome[unique_randoms[c]]=p.population[parent_index].genome[unique_randoms[c]];
     }
+    //std::cout<<std::endl<<"Child: ("<<i<<"): "<<std::endl;
+    //print_genome(new_population.population[i]);
     start=0;
   }
 
@@ -447,7 +448,10 @@ void run_GA(Population p){
   new_population.population.resize(p.population.size());
   scores.resize(p.population.size());
   cumulative_scores.resize(p.population.size());
-  unique_randoms.resize(p.population.size());
+  unique_randoms.resize(GENOME_SIZE);
+  for(i=0;i<unique_randoms.size();i++){
+    unique_randoms[i]=i;
+  }
 
   if(VERBOSE){
     std::cout<<"Running GA..."<<std::endl;
@@ -467,14 +471,15 @@ void run_GA(Population p){
   }
 }
 
-
 int main(){
   init();
   Population p;
+
   generate_population(p);
   printf("Intialized %d genomes. Genome size: %d\n",(int)POPULATION_SIZE,(int)GENOME_SIZE);
   printf("Generation     0 preview:\n");
   print_sample(p,9);
   run_GA(p);
+
   return 0;
 }

@@ -13,7 +13,7 @@ The main idea is
 
 ## Compile
 ```bash
-g++ -o ga.o main.cpp -lopencv_core -lopencv_highgui -lopencv_imgproc
+g++ -o ga.o main.cpp -lopencv_core -lopencv_highgui -lopencv_imgproc -lopencv_imgcodecs
 ```
 
 ## Glossary
@@ -31,7 +31,7 @@ g++ -o ga.o main.cpp -lopencv_core -lopencv_highgui -lopencv_imgproc
   - Minimum dimensions
 
 ## Known bugs
-- some characters in the goal string cause strlen to return bullshit (e.g '.').
+- haha yes
 
 ## Requirements
 OpenCV > 2.0

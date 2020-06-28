@@ -49,6 +49,8 @@ std::normal_distribution<> rand_norm(0,1);
 int GENOME_SIZE;
 std::map<char,double> mean_aspect;
 std::map<char,double> std_aspect;
+
+std::vector<cv::Scalar> color_pallete;
 /******************************************************************************/
 
 /*****************************DATA STRUCTURES**********************************/
@@ -304,6 +306,12 @@ void init(){
   std_aspect['W']=10;
   mean_aspect['T']=1;
   std_aspect['T']=0.2;
+
+  color_pallete.push_back(cv::Scalar(110,68,255));
+  color_pallete.push_back(cv::Scalar(184,146,255));
+  color_pallete.push_back(cv::Scalar(255,194,226));
+  color_pallete.push_back(cv::Scalar(255,144,179));
+  color_pallete.push_back(cv::Scalar(239,122,133));
 }
 
 //generates a population
@@ -482,73 +490,68 @@ void run_GA(Population p){
 /*makes a graphical representation of a genome*/
 void generate_representation(Population& p, int index,bool save){
   std::cout<<"Making image..."<<std::endl;
-  cv::Mat1f img(2000,2000); //This will store the image
+  cv::Mat img(2000,2000, CV_8UC3, cv::Scalar(20,20,20)); //This will store the image
   cv::Rect r;//this is the room shape
-  int i;
+  int i,j;
   double x,y,w,h;
   x=1000;
   y=1000;
-  for(i=0;i<p.population[index].genome.size()-1;i++){
-    w=p.population[index].genome[i].width*100;
-    h=p.population[index].genome[i].height*100;
-    cv::String use(1,p.population[index].genome[i].use);//make the use char into a cv string
-    r=cv::Rect(x,y,w,h);
-    cv::rectangle(img,r,cv::Scalar(255,255,255),5,8,0);
-    cv::putText(img, //target image
-              use, //text
-              cv::Point(x+w/2,y+h/2), //top-left position
-              cv::FONT_HERSHEY_DUPLEX,
-              2.0,//scale
-              cv::Scalar(255,255,255), //font color
-              2);
+  std::vector<bool> visited(GENOME_SIZE);
+  for(j=0;j<GENOME_SIZE;j++){
+    i=j;
+    //stupid bfs but should work
+    while(!visited[i]){
+      visited[i]=true;
+      w=p.population[index].genome[i].width*100;
+      h=p.population[index].genome[i].height*100;
+      int rel=p.population[index].genome[i].rel;
+      double next_w=p.population[index].genome[rel].width*100;
+      double next_h=p.population[index].genome[rel].height*100;
+      cv::String use(1,p.population[index].genome[i].use);//make the use char into a cv string
+      r=cv::Rect(x,y,w,h);
+      cv::rectangle(img,r,color_pallete[i%color_pallete.size()],5,8,0);
+      cv::putText(img, //target image
+                use, //text
+                cv::Point(x+w/2,y+h/2), //top-left position
+                cv::FONT_HERSHEY_DUPLEX,
+                2.0,//scale
+                cv::Scalar(255,255,255), //font color
+                2);
 
-    double next_w=p.population[index].genome[i+1].width*100;
-    double next_h=p.population[index].genome[i+1].height*100;
-    if(p.population[index].genome[i].b_dir=='N'){
-      y-=next_h;
-      if(p.population[index].genome[i].r_dir=='R'){
-        x-=next_w;
-      }
-    }
-    if(p.population[index].genome[i].b_dir=='S'){
-      y+=h;
-      if(p.population[index].genome[i].r_dir=='L'){
-        x+=w-next_w;
-      }
-    }
-    if(p.population[index].genome[i].b_dir=='W'){
-      x-=next_w;
-      if(p.population[index].genome[i].r_dir=='L'){
-        y-=h-next_h;
-      }
-    }
-    if(p.population[index].genome[i].b_dir=='E'){
-      x+=w;
-      if(p.population[index].genome[i].r_dir=='R'){
+
+      if(p.population[index].genome[i].b_dir=='N'){
         y-=next_h;
+        if(p.population[index].genome[i].r_dir=='R'){
+          x+=w-next_w;
+        }
       }
+      if(p.population[index].genome[i].b_dir=='S'){
+        y+=h;
+        if(p.population[index].genome[i].r_dir=='L'){
+          x+=w-next_w;
+        }
+      }
+      if(p.population[index].genome[i].b_dir=='W'){
+        x-=next_w;
+        if(p.population[index].genome[i].r_dir=='L'){
+          y-=h-next_h;
+        }
+      }
+      if(p.population[index].genome[i].b_dir=='E'){
+        x+=w;
+        if(p.population[index].genome[i].r_dir=='R'){
+          y-=h-next_h;
+        }
+      }
+      i=rel;
     }
-
   }
   //draw the last room
-  w=p.population[index].genome[i].width*100;
-  h=p.population[index].genome[i].height*100;
-  cv::String use(1,p.population[index].genome[i].use);//make the use char into a cv string
-  r=cv::Rect(x,y,w,h);
-  cv::rectangle(img,r,cv::Scalar(255,255,255),5,8,0);
-  cv::putText(img, //target image
-            use, //text
-            cv::Point(x+w/2,y+h/2), //top-left position
-            cv::FONT_HERSHEY_DUPLEX,
-            2.0,//scale
-            cv::Scalar(255,255,255), //font color
-            2);
-
 
   cv::imwrite("myImageWithRect.jpg",img);
   print_genome(p.population[index]);
   cv::namedWindow( "window", CV_WINDOW_NORMAL );
-  cv::resizeWindow("window", 800, 800);
+  cv::resizeWindow("window", 500, 500);
   cv::imshow( "window", img );
 //  cv::waitKey(0);
   if(save)

@@ -12,9 +12,8 @@ The main idea is
 6. repeat from 2
 
 ## Compile
-It should not need any libraries
 ```bash
-gcc -o GA main.c -lm
+g++ -o ga.o main.cpp -lopencv_core -lopencv_highgui -lopencv_imgproc
 ```
 
 ## Glossary
@@ -32,4 +31,7 @@ gcc -o GA main.c -lm
   - Minimum dimensions
 
 ## Known bugs
-- some characters in the goal string cause strlen to return bullshit (e.g '.'). 
+- some characters in the goal string cause strlen to return bullshit (e.g '.').
+
+## Requirements
+OpenCV > 2.0

@@ -6,6 +6,8 @@
 #include <string>
 #include <map>
 
+#include <opencv2/opencv.hpp>
+
 //TODO: Score function needs more criteria
 
 /************************************CONSTANTS*********************************/
@@ -342,6 +344,12 @@ double score(Genome& g){
       //std::cout<<"Room  ("<<g.genome[i].use<<") aspect: "<<room_aspect<<" (z="<<z_aspect<<")"<<std::endl;
     }
     score+=z_aspect;
+    if(g.genome[i].width<0){
+      score=0;
+    }
+    if(g.genome[i].height<0){
+      score=0;
+    }
   }
   score/=GENOME_SIZE;//normalize so that final score max=1
 
@@ -471,6 +479,82 @@ void run_GA(Population p){
   }
 }
 
+/*makes a graphical representation of a genome*/
+void generate_representation(Population& p, int index,bool save){
+  std::cout<<"Making image..."<<std::endl;
+  cv::Mat1f img(2000,2000); //This will store the image
+  cv::Rect r;//this is the room shape
+  int i;
+  double x,y,w,h;
+  x=1000;
+  y=1000;
+  for(i=0;i<p.population[index].genome.size()-1;i++){
+    w=p.population[index].genome[i].width*100;
+    h=p.population[index].genome[i].height*100;
+    cv::String use(1,p.population[index].genome[i].use);//make the use char into a cv string
+    r=cv::Rect(x,y,w,h);
+    cv::rectangle(img,r,cv::Scalar(255,255,255),5,8,0);
+    cv::putText(img, //target image
+              use, //text
+              cv::Point(x+w/2,y+h/2), //top-left position
+              cv::FONT_HERSHEY_DUPLEX,
+              2.0,//scale
+              cv::Scalar(255,255,255), //font color
+              2);
+
+    double next_w=p.population[index].genome[i+1].width*100;
+    double next_h=p.population[index].genome[i+1].height*100;
+    if(p.population[index].genome[i].b_dir=='N'){
+      y-=next_h;
+      if(p.population[index].genome[i].r_dir=='R'){
+        x-=next_w;
+      }
+    }
+    if(p.population[index].genome[i].b_dir=='S'){
+      y+=h;
+      if(p.population[index].genome[i].r_dir=='L'){
+        x+=w-next_w;
+      }
+    }
+    if(p.population[index].genome[i].b_dir=='W'){
+      x-=next_w;
+      if(p.population[index].genome[i].r_dir=='L'){
+        y-=h-next_h;
+      }
+    }
+    if(p.population[index].genome[i].b_dir=='E'){
+      x+=w;
+      if(p.population[index].genome[i].r_dir=='R'){
+        y-=next_h;
+      }
+    }
+
+  }
+  //draw the last room
+  w=p.population[index].genome[i].width*100;
+  h=p.population[index].genome[i].height*100;
+  cv::String use(1,p.population[index].genome[i].use);//make the use char into a cv string
+  r=cv::Rect(x,y,w,h);
+  cv::rectangle(img,r,cv::Scalar(255,255,255),5,8,0);
+  cv::putText(img, //target image
+            use, //text
+            cv::Point(x+w/2,y+h/2), //top-left position
+            cv::FONT_HERSHEY_DUPLEX,
+            2.0,//scale
+            cv::Scalar(255,255,255), //font color
+            2);
+
+
+  cv::imwrite("myImageWithRect.jpg",img);
+  print_genome(p.population[index]);
+  cv::namedWindow( "window", CV_WINDOW_NORMAL );
+  cv::resizeWindow("window", 800, 800);
+  cv::imshow( "window", img );
+//  cv::waitKey(0);
+  if(save)
+    cv::imwrite("image.jpg",img);
+}
+
 int main(){
   init();
   Population p;
@@ -480,6 +564,7 @@ int main(){
   printf("Generation     0 preview:\n");
   print_sample(p,9);
   run_GA(p);
-
+  generate_representation(p,10,false);
+  cv::waitKey(0);
   return 0;
 }

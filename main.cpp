@@ -34,10 +34,13 @@ const int ENSUITE_OPTS_MAX=3;
 
 /**********************************PARAMETERS**********************************/
 //This sets the types of rooms in the plan (e.g 2 bdr with kitchen and 2 wc)
-static const char CFG_TYPES_[]={'B','B','K','W','T','T','M','L','C','C'};
+static const char CFG_TYPES_[]={'B','K','W','C'};
 std::vector<char> CFG_TYPES;
+//this sets the connections of each room(is populated in init())
+std::vector<std::vector<int> > CFG_CONNS;
+
 //This one sets if you want ensuite (0) or not (1)
-static const char CFG_ENSUITE_[]={1,1,1,1,0,3,1,3,3};
+static const char CFG_ENSUITE_[]={1,1,1,1};
 std::vector<char> CFG_ENSUITE;
 /******************************************************************************/
 
@@ -75,48 +78,40 @@ public:
 
   /****************************************
   Variables [b_dir,r_dir] contains the Bearing and Rotational direction of
-  the room relative to room [rel]. Rotational direction means left or right
-  side of [rel], seen as if standing in the center of that room.
+  the room relative to room [next_room_index]. Rotational direction means left or right
+  side of [next_room_index], seen as if standing in the center of that room.
   [b_dir] can be:
   N: north (up)
   W: west (left)
   S: south (down)
   E: east (right)
-  [r_dir] can be:
-  L: left
-  R: right
-  Remember to change R_DIR_OPTS and B_DIR_OPTS if you add another direction (???)
+  [r_dir] is:
+  The x or y offset (depending on b_dir) as a percentage of the width or height
+  it is always up-> down or left->right positive.
   *****************************************/
-  char b_dir,r_dir;
+  char b_dir;
+  double r_dir;
 
   /****************************************
-  Variable [rel] contains the room index that the current room postion is
-  based on.
+  Vector [next_room_index] contains the room indeices that b_dir and r_dir
+  affect the position of.
+  this implies the genome is a many-to-one directed graph(node leads to many
+  others, but is lead to only by one). indegree<=1, outdegree>=0
   *****************************************/
-  int rel;
+  std::vector<int> next_room_index;
+  int previous_room_index;
+
 
   double width,height;
 
-  /****************************************
-  Variable [ensuite] defines a bathroom or store if it needs to be connected
-  to a bedroom or kitchen.
-  [ensuite] can be:
-  0: MUST connect
-  1: MUST NOT connect
-  2: PREFER connect
-  3: dont care if connected or not
-  *****************************************/
-  //TODO: Verandas must be hardcoded to connect to anything except walkways
-  int ensuite;
-
+  //Default constructor
   Gene(){
     use='O';
     b_dir='N';
     r_dir='L';
-    rel=0;
+    previous_room_index=0;
     width=3.0;
     height=3.5;
-    ensuite=3;
   }
 };
 
@@ -233,28 +228,26 @@ double random_dim(char use){
   return 100;
 }
 
+//TODO: replace rand() with unidist
 void randomize_gene(Gene& g){
   //genes are essentially room definitions.
-  if(ROOM_TYPE_CHANGES){
-    g.use=USE_OPTS[rand()%(USE_OPTS_SIZE)];
-  }
   g.b_dir=B_DIR_OPTS[rand()%(B_DIR_OPTS_SIZE)];
-  g.r_dir=R_DIR_OPTS[rand()%(R_DIR_OPTS_SIZE)];
-  g.rel=rand()%GENOME_SIZE;
+  g.r_dir=unidist(2)-1;//random from -1 to 1
+  //g.next_room_index=rand()%GENOME_SIZE;
   g.width=random_dim(g.use);
   g.height=random_dim(g.use);
 }
 
 void print_genome(Genome g){
-  int i;
+  int i,j;
+  std::cout.precision(4);
+  std::cout.width(8);
   for(i=0;i<GENOME_SIZE;i++){
-    printf("\n\t%c%c%c %2d %.2f %.2f %d",g.genome[i].use,
-                                     g.genome[i].b_dir,
-                                     g.genome[i].r_dir,
-                                     g.genome[i].rel,
-                                     g.genome[i].width,
-                                     g.genome[i].height,
-                                     g.genome[i].ensuite);
+    std::cout<<"\n\t"<<g.genome[i].use<<g.genome[i].b_dir<<"\t"<<g.genome[i].r_dir<<"\t[";
+    for(j=0;j<g.genome[i].next_room_index.size();j++){
+      std::cout<<g.genome[i].next_room_index[j]<<", ";
+    }
+    std::cout<<"]("<<g.genome[i].previous_room_index<<")\t"<<g.genome[i].width<<"\t"<<g.genome[i].height;
   }
   std::cout<<std::endl;
 }
@@ -284,6 +277,25 @@ void init(){
     std::cout<<"CFG_TYPES initialized to "<<str<<std::endl;
   }
   GENOME_SIZE=CFG_TYPES.size();
+
+  std::vector<int> tmpconn;
+  CFG_CONNS.resize(GENOME_SIZE);
+  //('B','K','W','C')
+  tmpconn.push_back(3);//connect bedroom to covered veranda
+  CFG_CONNS[0]=tmpconn;
+  tmpconn.clear();
+  std::cout<<"segfault"<<std::endl;
+
+  //connect kitchen to nothing
+  CFG_CONNS[1]=tmpconn;
+
+  tmpconn.push_back(0);//connect walkway to bedroom
+  tmpconn.push_back(1);//and kitchen
+  CFG_CONNS[2]=tmpconn;
+  tmpconn.clear();
+
+  //connect veranda to nothing
+  CFG_CONNS[3]=tmpconn;
 
   //'B','M','K','S','L','C','U','O','W','T'
   mean_aspect['B']=1;
@@ -324,10 +336,10 @@ void generate_population(Population& p){
   for(i=0;i<POPULATION_SIZE;i++){
     for(j=0;j<GENOME_SIZE;j++){//this loop is the generator function
       p.population[i].genome[j].use=CFG_TYPES[j];
-      p.population[i].genome[j].ensuite=CFG_ENSUITE[j];
       randomize_gene(p.population[i].genome[j]);
+      p.population[i].genome[j].next_room_index=CFG_CONNS[j];
     }
-    random_shuffle_genome(p.population[i]);
+    //random_shuffle_genome(p.population[i]);
   }
 }
 
@@ -488,75 +500,62 @@ void run_GA(Population p){
 }
 
 /*makes a graphical representation of a genome*/
-void generate_representation(Population& p, int index,bool save){
-  std::cout<<"Making image..."<<std::endl;
-  cv::Mat img(2000,2000, CV_8UC3, cv::Scalar(20,20,20)); //This will store the image
-  cv::Rect r;//this is the room shape
-  int i,j;
-  double x,y,w,h;
-  x=1000;
-  y=1000;
-  std::vector<bool> visited(GENOME_SIZE);
-  for(j=0;j<GENOME_SIZE;j++){
-    i=j;
-    //stupid bfs but should work
-    while(!visited[i]){
-      visited[i]=true;
-      w=p.population[index].genome[i].width*100;
-      h=p.population[index].genome[i].height*100;
-      int rel=p.population[index].genome[i].rel;
-      double next_w=p.population[index].genome[rel].width*100;
-      double next_h=p.population[index].genome[rel].height*100;
-      cv::String use(1,p.population[index].genome[i].use);//make the use char into a cv string
-      r=cv::Rect(x,y,w,h);
-      cv::rectangle(img,r,color_pallete[i%color_pallete.size()],5,8,0);
-      cv::putText(img, //target image
-                use, //text
-                cv::Point(x+w/2,y+h/2), //top-left position
-                cv::FONT_HERSHEY_DUPLEX,
-                2.0,//scale
-                cv::Scalar(255,255,255), //font color
-                2);
-
-
-      if(p.population[index].genome[i].b_dir=='N'){
-        y-=next_h;
-        if(p.population[index].genome[i].r_dir=='R'){
-          x+=w-next_w;
-        }
-      }
-      if(p.population[index].genome[i].b_dir=='S'){
-        y+=h;
-        if(p.population[index].genome[i].r_dir=='L'){
-          x+=w-next_w;
-        }
-      }
-      if(p.population[index].genome[i].b_dir=='W'){
-        x-=next_w;
-        if(p.population[index].genome[i].r_dir=='L'){
-          y-=h-next_h;
-        }
-      }
-      if(p.population[index].genome[i].b_dir=='E'){
-        x+=w;
-        if(p.population[index].genome[i].r_dir=='R'){
-          y-=h-next_h;
-        }
-      }
-      i=rel;
-    }
-  }
-  //draw the last room
-
-  cv::imwrite("myImageWithRect.jpg",img);
-  print_genome(p.population[index]);
-  cv::namedWindow( "window", CV_WINDOW_NORMAL );
-  cv::resizeWindow("window", 500, 500);
-  cv::imshow( "window", img );
-//  cv::waitKey(0);
-  if(save)
-    cv::imwrite("image.jpg",img);
-}
+//TODO: fix this, its absolutely broken
+// void generate_representation(Population& p, int index,bool save){
+//   std::cout<<"Making image..."<<std::endl;
+//   cv::Mat img(2000,2000, CV_8UC3, cv::Scalar(50,50,50)); //This will store the image
+//   cv::Rect r;//this is the room shape
+//   int i,j,next_room_index;
+//   double x,y,w,h;
+//   std::vector<bool> visited(GENOME_SIZE);
+//
+//   x=1000;
+//   y=1000;
+//
+//   for(j=0;j<GENOME_SIZE;j++){
+//     i=j;
+//     while(!visited[i]){
+//       visited[i]=true;//DFS-ish traversal without queue or recursion? idk it works tho
+//
+//       //index of room that current one is placed relative to
+//       next_room_index=p.population[index].genome[i].next_room_index;
+//       //Dimensions of room i
+//       w=              p.population[index].genome[i].width*100;
+//       h=              p.population[index].genome[i].height*100;
+//       //Directions of where to place room next_room_index
+//       char b_dir=     p.population[index].genome[i].b_dir;
+//       char r_dir=     p.population[index].genome[i].r_dir;
+//       //Room label (use)
+//       cv::String use(1,p.population[index].genome[i].use);//make the use char into a cv string
+//       //Dimensions of room next_room_index
+//       //double next_w=  p.population[index].genome[next_room_index].width*100;
+//       //double next_h=  p.population[index].genome[next_room_index].height*100;
+//       //Room i color
+//       cv::Scalar color(color_pallete[i%color_pallete.size()]);
+//       //Draw room i
+//       r=cv::Rect(x,y,w,h);
+//       cv::rectangle(img,r,color,5,8,0);
+//       cv::putText(img, use, cv::Point(x+w/2,y+h/2), cv::FONT_HERSHEY_DUPLEX, /*size=*/2.0, color,2);
+//
+//       //move to coordinates of room next_room_index
+//       if(!visited[next_room_index]){//look ahead
+//         if(b_dir=='N'){y-=next_h;if(r_dir=='R'){x+=w-next_w;}}
+//         if(b_dir=='S'){y+=h;if(r_dir=='L'){x+=w-next_w;}}
+//         if(b_dir=='W'){x-=next_w;if(r_dir=='L'){y+=h-next_h;}}
+//         if(b_dir=='E'){x+=w;if(r_dir=='R'){y-=h-next_h;}}
+//       }
+//       i=next_room_index;//Go to the next room in the graph
+//     }
+//     //Go to the next unvisited room
+//   }
+//
+//   print_genome(p.population[index]);
+//   cv::namedWindow( "window", CV_WINDOW_NORMAL );
+//   cv::resizeWindow("window", 500, 500);
+//   cv::imshow( "window", img );
+//   if(save)
+//     cv::imwrite("image.jpg",img);
+// }
 
 int main(){
   init();
@@ -567,7 +566,7 @@ int main(){
   printf("Generation     0 preview:\n");
   print_sample(p,9);
   run_GA(p);
-  generate_representation(p,10,false);
-  cv::waitKey(0);
+  //generate_representation(p,10,false);
+  //cv::waitKey(0);
   return 0;
 }

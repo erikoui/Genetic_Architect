@@ -5,6 +5,7 @@
 #include <random>
 #include <string>
 #include <map>
+#include <stack>
 
 #include <opencv2/opencv.hpp>
 
@@ -25,7 +26,7 @@ const int UPDATE_INTERVAL=10;//how many generations between printing stats
 
 const char USE_OPTS[]={'B','M','K','S','L','C','U','O','W','T'};
 #define USE_OPTS_SIZE 10
-const char B_DIR_OPTS[]={'N','W','S','E'};
+const char B_DIR_OPTS[]={'N','S','W','E'};
 #define B_DIR_OPTS_SIZE 4
 const char R_DIR_OPTS[]={'R','L'};
 #define R_DIR_OPTS_SIZE 2
@@ -238,6 +239,7 @@ void randomize_gene(Gene& g){
   g.height=random_dim(g.use);
 }
 
+//TODO: better formatting
 void print_genome(Genome g){
   int i,j;
   std::cout.precision(4);
@@ -326,6 +328,15 @@ void init(){
   color_pallete.push_back(cv::Scalar(239,122,133));
 }
 
+void generate_prevs(Genome& g){
+  int i,j;
+  for(i=0;i<GENOME_SIZE;i++){
+    for(j=0;j<g.genome[i].next_room_index.size();j++){
+      g.genome[g.genome[i].next_room_index[j]].previous_room_index=i;
+    }
+  }
+}
+
 //generates a population
 void generate_population(Population& p){
   int i,j;
@@ -338,8 +349,10 @@ void generate_population(Population& p){
       p.population[i].genome[j].use=CFG_TYPES[j];
       randomize_gene(p.population[i].genome[j]);
       p.population[i].genome[j].next_room_index=CFG_CONNS[j];
+      p.population[i].genome[j].previous_room_index=-1;
     }
     //random_shuffle_genome(p.population[i]);
+    generate_prevs(p.population[i]);
   }
 }
 
@@ -501,61 +514,91 @@ void run_GA(Population p){
 
 /*makes a graphical representation of a genome*/
 //TODO: fix this, its absolutely broken
-// void generate_representation(Population& p, int index,bool save){
-//   std::cout<<"Making image..."<<std::endl;
-//   cv::Mat img(2000,2000, CV_8UC3, cv::Scalar(50,50,50)); //This will store the image
-//   cv::Rect r;//this is the room shape
-//   int i,j,next_room_index;
-//   double x,y,w,h;
-//   std::vector<bool> visited(GENOME_SIZE);
-//
-//   x=1000;
-//   y=1000;
-//
-//   for(j=0;j<GENOME_SIZE;j++){
-//     i=j;
-//     while(!visited[i]){
-//       visited[i]=true;//DFS-ish traversal without queue or recursion? idk it works tho
-//
-//       //index of room that current one is placed relative to
-//       next_room_index=p.population[index].genome[i].next_room_index;
-//       //Dimensions of room i
-//       w=              p.population[index].genome[i].width*100;
-//       h=              p.population[index].genome[i].height*100;
-//       //Directions of where to place room next_room_index
-//       char b_dir=     p.population[index].genome[i].b_dir;
-//       char r_dir=     p.population[index].genome[i].r_dir;
-//       //Room label (use)
-//       cv::String use(1,p.population[index].genome[i].use);//make the use char into a cv string
-//       //Dimensions of room next_room_index
-//       //double next_w=  p.population[index].genome[next_room_index].width*100;
-//       //double next_h=  p.population[index].genome[next_room_index].height*100;
-//       //Room i color
-//       cv::Scalar color(color_pallete[i%color_pallete.size()]);
-//       //Draw room i
-//       r=cv::Rect(x,y,w,h);
-//       cv::rectangle(img,r,color,5,8,0);
-//       cv::putText(img, use, cv::Point(x+w/2,y+h/2), cv::FONT_HERSHEY_DUPLEX, /*size=*/2.0, color,2);
-//
-//       //move to coordinates of room next_room_index
-//       if(!visited[next_room_index]){//look ahead
-//         if(b_dir=='N'){y-=next_h;if(r_dir=='R'){x+=w-next_w;}}
-//         if(b_dir=='S'){y+=h;if(r_dir=='L'){x+=w-next_w;}}
-//         if(b_dir=='W'){x-=next_w;if(r_dir=='L'){y+=h-next_h;}}
-//         if(b_dir=='E'){x+=w;if(r_dir=='R'){y-=h-next_h;}}
-//       }
-//       i=next_room_index;//Go to the next room in the graph
-//     }
-//     //Go to the next unvisited room
-//   }
-//
-//   print_genome(p.population[index]);
-//   cv::namedWindow( "window", CV_WINDOW_NORMAL );
-//   cv::resizeWindow("window", 500, 500);
-//   cv::imshow( "window", img );
-//   if(save)
-//     cv::imwrite("image.jpg",img);
-// }
+void generate_representation(Population& p, int index,bool save){
+  std::cout<<"Making image..."<<std::endl;
+  cv::Mat img(2000,2000, CV_8UC3, cv::Scalar(50,50,50)); //This will store the image
+  cv::Rect r;//this is the room shape
+  int i,j,k,next_room_index;
+  double x,y,w,h,next_w,next_h,r_dir;
+  char b_dir;
+  std::vector<bool> visited(GENOME_SIZE);
+  std::stack<int> stacc;
+
+  x=1000;
+  y=1000;
+  //TODO: make this recursive so that x and y bactracks (maybe a stack would do as well)
+  for(k=0;k<GENOME_SIZE;k++){
+    if(p.population[index].genome[k].previous_room_index==-1){//room has no dependencies
+      i=k;
+      while(!visited[i]){
+        std::cout<<"Visiting"<<i<<std::endl;
+        visited[i]=true;
+        int prev_index= p.population[index].genome[i].previous_room_index;
+        std::cout<<"next index:"<<prev_index<<std::endl;
+        w=              p.population[index].genome[i].width*100;
+        h=              p.population[index].genome[i].height*100;
+        if(prev_index!=-1){
+          next_w=  p.population[index].genome[prev_index].width*100;
+          next_h=  p.population[index].genome[prev_index].height*100;
+          b_dir=     p.population[index].genome[i].b_dir;
+          r_dir=     p.population[index].genome[i].r_dir;
+
+          switch(b_dir){
+            case 'N':
+              y-=h;
+              break;
+            case 'S':
+              y+=next_h;
+              break;
+            case 'W':
+              x-=w;
+              break;
+            case 'E':
+              x+=next_w;
+              break;
+            }
+        }
+        cv::String use(1,p.population[index].genome[i].use);//make the use char into a cv string
+        cv::Scalar color(color_pallete[i%color_pallete.size()]);
+
+        //Draw connected room
+        r=cv::Rect(x,y,w,h);
+        cv::rectangle(img,r,color,5,8,0);
+        cv::putText(img, use, cv::Point(x+w/2,y+h/2), cv::FONT_HERSHEY_DUPLEX, /*size=*/2.0, color,2);
+        //hacky backtracking works like shit delete this switch statement asap
+        switch(b_dir){
+          case 'N':
+            y+=h;
+            break;
+          case 'S':
+            y-=next_h;
+            break;
+          case 'W':
+            x+=w;
+            break;
+          case 'E':
+            x-=next_w;
+            break;
+          }
+        for(j=0;j<p.population[index].genome[i].next_room_index.size();j++){//for all connections
+          prev_index= p.population[index].genome[i].next_room_index[j];
+          stacc.push(prev_index);
+        }
+        if(!stacc.empty()){
+          i=stacc.top();
+          stacc.pop();
+        }
+      }
+    }
+  }
+
+  print_genome(p.population[index]);
+  cv::namedWindow( "window", CV_WINDOW_NORMAL );
+  cv::resizeWindow("window", 500, 500);
+  cv::imshow( "window", img );
+  if(save)
+    cv::imwrite("image.jpg",img);
+}
 
 int main(){
   init();
@@ -566,7 +609,7 @@ int main(){
   printf("Generation     0 preview:\n");
   print_sample(p,9);
   run_GA(p);
-  //generate_representation(p,10,false);
-  //cv::waitKey(0);
+  generate_representation(p,2,false);
+  cv::waitKey(0);
   return 0;
 }

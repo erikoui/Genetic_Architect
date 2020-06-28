@@ -34,10 +34,10 @@ const int ENSUITE_OPTS_MAX=3;
 
 /**********************************PARAMETERS**********************************/
 //This sets the types of rooms in the plan (e.g 2 bdr with kitchen and 2 wc)
-static const char CFG_TYPES_[]={'B','B','K','W','T','T','M','L','C','C'};
+static const char CFG_TYPES_[]={'B','K','W','C'};
 std::vector<char> CFG_TYPES;
 //This one sets if you want ensuite (0) or not (1)
-static const char CFG_ENSUITE_[]={1,1,1,1,0,3,1,3,3};
+static const char CFG_ENSUITE_[]={1,1,1,1};
 std::vector<char> CFG_ENSUITE;
 /******************************************************************************/
 
@@ -75,8 +75,8 @@ public:
 
   /****************************************
   Variables [b_dir,r_dir] contains the Bearing and Rotational direction of
-  the room relative to room [rel]. Rotational direction means left or right
-  side of [rel], seen as if standing in the center of that room.
+  the room relative to room [next_room_index]. Rotational direction means left or right
+  side of [next_room_index], seen as if standing in the center of that room.
   [b_dir] can be:
   N: north (up)
   W: west (left)
@@ -90,10 +90,10 @@ public:
   char b_dir,r_dir;
 
   /****************************************
-  Variable [rel] contains the room index that the current room postion is
-  based on.
+  Variable [next_room_index] contains the room index that b_dir and r_dir affect the
+  position of.
   *****************************************/
-  int rel;
+  int next_room_index;
 
   double width,height;
 
@@ -113,7 +113,7 @@ public:
     use='O';
     b_dir='N';
     r_dir='L';
-    rel=0;
+    next_room_index=0;
     width=3.0;
     height=3.5;
     ensuite=3;
@@ -240,7 +240,7 @@ void randomize_gene(Gene& g){
   }
   g.b_dir=B_DIR_OPTS[rand()%(B_DIR_OPTS_SIZE)];
   g.r_dir=R_DIR_OPTS[rand()%(R_DIR_OPTS_SIZE)];
-  g.rel=rand()%GENOME_SIZE;
+  g.next_room_index=rand()%GENOME_SIZE;
   g.width=random_dim(g.use);
   g.height=random_dim(g.use);
 }
@@ -251,7 +251,7 @@ void print_genome(Genome g){
     printf("\n\t%c%c%c %2d %.2f %.2f %d",g.genome[i].use,
                                      g.genome[i].b_dir,
                                      g.genome[i].r_dir,
-                                     g.genome[i].rel,
+                                     g.genome[i].next_room_index,
                                      g.genome[i].width,
                                      g.genome[i].height,
                                      g.genome[i].ensuite);
@@ -490,70 +490,56 @@ void run_GA(Population p){
 /*makes a graphical representation of a genome*/
 void generate_representation(Population& p, int index,bool save){
   std::cout<<"Making image..."<<std::endl;
-  cv::Mat img(2000,2000, CV_8UC3, cv::Scalar(20,20,20)); //This will store the image
+  cv::Mat img(2000,2000, CV_8UC3, cv::Scalar(50,50,50)); //This will store the image
   cv::Rect r;//this is the room shape
-  int i,j;
+  int i,j,next_room_index;
   double x,y,w,h;
+  std::vector<bool> visited(GENOME_SIZE);
+
   x=1000;
   y=1000;
-  std::vector<bool> visited(GENOME_SIZE);
+
   for(j=0;j<GENOME_SIZE;j++){
     i=j;
-    //stupid bfs but should work
     while(!visited[i]){
-      visited[i]=true;
-      w=p.population[index].genome[i].width*100;
-      h=p.population[index].genome[i].height*100;
-      int rel=p.population[index].genome[i].rel;
-      double next_w=p.population[index].genome[rel].width*100;
-      double next_h=p.population[index].genome[rel].height*100;
+      visited[i]=true;//DFS-ish traversal without queue or recursion? idk it works tho
+
+      //index of room that current one is placed relative to
+      next_room_index=p.population[index].genome[i].next_room_index;
+      //Dimensions of room i
+      w=              p.population[index].genome[i].width*100;
+      h=              p.population[index].genome[i].height*100;
+      //Directions of where to place room next_room_index
+      char b_dir=     p.population[index].genome[i].b_dir;
+      char r_dir=     p.population[index].genome[i].r_dir;
+      //Room label (use)
       cv::String use(1,p.population[index].genome[i].use);//make the use char into a cv string
+      //Dimensions of room next_room_index
+      double next_w=  p.population[index].genome[next_room_index].width*100;
+      double next_h=  p.population[index].genome[next_room_index].height*100;
+      //Room i color
+      cv::Scalar color(color_pallete[i%color_pallete.size()]);
+      //Draw room i
       r=cv::Rect(x,y,w,h);
-      cv::rectangle(img,r,color_pallete[i%color_pallete.size()],5,8,0);
-      cv::putText(img, //target image
-                use, //text
-                cv::Point(x+w/2,y+h/2), //top-left position
-                cv::FONT_HERSHEY_DUPLEX,
-                2.0,//scale
-                cv::Scalar(255,255,255), //font color
-                2);
+      cv::rectangle(img,r,color,5,8,0);
+      cv::putText(img, use, cv::Point(x+w/2,y+h/2), cv::FONT_HERSHEY_DUPLEX, /*size=*/2.0, color,2);
 
-
-      if(p.population[index].genome[i].b_dir=='N'){
-        y-=next_h;
-        if(p.population[index].genome[i].r_dir=='R'){
-          x+=w-next_w;
-        }
+      //move to coordinates of room next_room_index
+      if(!visited[next_room_index]){//look ahead
+        if(b_dir=='N'){y-=next_h;if(r_dir=='R'){x+=w-next_w;}}
+        if(b_dir=='S'){y+=h;if(r_dir=='L'){x+=w-next_w;}}
+        if(b_dir=='W'){x-=next_w;if(r_dir=='L'){y+=h-next_h;}}
+        if(b_dir=='E'){x+=w;if(r_dir=='R'){y-=h-next_h;}}
       }
-      if(p.population[index].genome[i].b_dir=='S'){
-        y+=h;
-        if(p.population[index].genome[i].r_dir=='L'){
-          x+=w-next_w;
-        }
-      }
-      if(p.population[index].genome[i].b_dir=='W'){
-        x-=next_w;
-        if(p.population[index].genome[i].r_dir=='L'){
-          y-=h-next_h;
-        }
-      }
-      if(p.population[index].genome[i].b_dir=='E'){
-        x+=w;
-        if(p.population[index].genome[i].r_dir=='R'){
-          y-=h-next_h;
-        }
-      }
-      i=rel;
+      i=next_room_index;//Go to the next room in the graph
     }
+    //Go to the next unvisited room
   }
-  //draw the last room
 
-  cv::imwrite("myImageWithRect.jpg",img);
   print_genome(p.population[index]);
   cv::namedWindow( "window", CV_WINDOW_NORMAL );
   cv::resizeWindow("window", 500, 500);
   cv::imshow( "window", img );
-//  cv::waitKey(0);
   if(save)
     cv::imwrite("image.jpg",img);
 }

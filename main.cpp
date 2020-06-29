@@ -512,85 +512,61 @@ void run_GA(Population p){
   }
 }
 
-/*makes a graphical representation of a genome*/
-//TODO: fix this, its absolutely broken
+void draw_room_and_move(cv::Mat& img,Population& p,int p_index,int g_index,int prev_index,std::stack<double>& x,std::stack<double>& y){
+  double w=p.population[p_index].genome[g_index].width*100;
+  double h=p.population[p_index].genome[g_index].height*100;
+  cv::String use(1,p.population[p_index].genome[g_index].use);//make the use char into a cv string
+  cv::Scalar color(color_pallete[g_index%color_pallete.size()]);
+
+  cv::Rect r=cv::Rect(x.top(),y.top(),w,h);
+  cv::rectangle(img,r,color,5,8,0);
+  cv::putText(img, use, cv::Point(x.top()+w/2,y.top()+h/2), cv::FONT_HERSHEY_DUPLEX, /*size=*/2.0, color,2);
+
+  if(prev_index!=-1){
+    double next_w=  p.population[p_index].genome[prev_index].width*100;
+    double next_h=  p.population[p_index].genome[prev_index].height*100;
+    char b_dir=     p.population[p_index].genome[g_index].b_dir;
+    double r_dir=     p.population[p_index].genome[g_index].r_dir;
+
+    switch(b_dir){
+      case 'N':
+        y.push(y.top()-h);
+        break;
+      case 'S':
+        y.push(y.top()+next_h);
+        break;
+      case 'W':
+        x.push(x.top()-w);
+        break;
+      case 'E':
+        x.push(x.top()+next_w);
+        break;
+      }
+  }
+}
+
+//TODO: this function
+vector<cv::Rect> room_rects;
+void traverse_genome(Population& p,int p_index,int root_node){
+  int i;
+  for(i=0;i<GENOME_SIZE;i++){
+
+  }
+}
+/*this is the image generator. it makes a graphical representation of a genome*/
 void generate_representation(Population& p, int index,bool save){
   std::cout<<"Making image..."<<std::endl;
   cv::Mat img(2000,2000, CV_8UC3, cv::Scalar(50,50,50)); //This will store the image
-  cv::Rect r;//this is the room shape
-  int i,j,k,next_room_index;
-  double x,y,w,h,next_w,next_h,r_dir;
-  char b_dir;
-  std::vector<bool> visited(GENOME_SIZE);
-  std::stack<int> stacc;
+  int k;
 
-  x=1000;
-  y=1000;
-  //TODO: make this recursive so that x and y bactracks (maybe a stack would do as well)
   for(k=0;k<GENOME_SIZE;k++){
     if(p.population[index].genome[k].previous_room_index==-1){//room has no dependencies
-      i=k;
-      while(!visited[i]){
-        std::cout<<"Visiting"<<i<<std::endl;
-        visited[i]=true;
-        int prev_index= p.population[index].genome[i].previous_room_index;
-        std::cout<<"next index:"<<prev_index<<std::endl;
-        w=              p.population[index].genome[i].width*100;
-        h=              p.population[index].genome[i].height*100;
-        if(prev_index!=-1){
-          next_w=  p.population[index].genome[prev_index].width*100;
-          next_h=  p.population[index].genome[prev_index].height*100;
-          b_dir=     p.population[index].genome[i].b_dir;
-          r_dir=     p.population[index].genome[i].r_dir;
-
-          switch(b_dir){
-            case 'N':
-              y-=h;
-              break;
-            case 'S':
-              y+=next_h;
-              break;
-            case 'W':
-              x-=w;
-              break;
-            case 'E':
-              x+=next_w;
-              break;
-            }
-        }
-        cv::String use(1,p.population[index].genome[i].use);//make the use char into a cv string
-        cv::Scalar color(color_pallete[i%color_pallete.size()]);
-
-        //Draw connected room
-        r=cv::Rect(x,y,w,h);
-        cv::rectangle(img,r,color,5,8,0);
-        cv::putText(img, use, cv::Point(x+w/2,y+h/2), cv::FONT_HERSHEY_DUPLEX, /*size=*/2.0, color,2);
-        //hacky backtracking works like shit delete this switch statement asap
-        switch(b_dir){
-          case 'N':
-            y+=h;
-            break;
-          case 'S':
-            y-=next_h;
-            break;
-          case 'W':
-            x+=w;
-            break;
-          case 'E':
-            x-=next_w;
-            break;
-          }
-        for(j=0;j<p.population[index].genome[i].next_room_index.size();j++){//for all connections
-          prev_index= p.population[index].genome[i].next_room_index[j];
-          stacc.push(prev_index);
-        }
-        if(!stacc.empty()){
-          i=stacc.top();
-          stacc.pop();
-        }
-      }
+      traverse_genome(p,index,k);
     }
   }
+  //for(rectangle in room_rects){
+      //draw the rectangle
+  //}
 
   print_genome(p.population[index]);
   cv::namedWindow( "window", CV_WINDOW_NORMAL );

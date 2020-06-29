@@ -545,28 +545,71 @@ void draw_room_and_move(cv::Mat& img,Population& p,int p_index,int g_index,int p
   }
 }
 
-//TODO: this function
-vector<cv::Rect> room_rects;
-void traverse_genome(Population& p,int p_index,int root_node){
-  int i;
-  for(i=0;i<GENOME_SIZE;i++){
-
+std::vector<cv::Rect> room_rects;
+std::vector<bool> visited;
+//this fills room_rects, which can also be used to get distances between rooms.
+void traverse_genome(Population& p,int p_index,int root_node,double x,double y){
+  if(visited[root_node]){
+    return;
   }
+  visited[root_node]=true;
+  int i;
+  double new_x=x,new_y=y;
+
+  double w=p.population[p_index].genome[root_node].width*100;
+  double h=p.population[p_index].genome[root_node].height*100;
+
+  for(i=0;i<p.population[p_index].genome[root_node].next_room_index.size();i++){
+    int next_index=p.population[p_index].genome[root_node].next_room_index[i];
+    double next_h=p.population[p_index].genome[next_index].height*100;
+    double next_w=p.population[p_index].genome[next_index].width*100;
+
+    char b_dir=p.population[p_index].genome[next_index].b_dir;
+    double r_dir=p.population[p_index].genome[next_index].r_dir;
+    switch(b_dir){
+     case 'N':
+       new_y=y-next_h;
+       new_x=x+w*r_dir;
+       break;
+     case 'S':
+       new_y=y+h;
+       new_x=x+w*r_dir;
+       break;
+     case 'W':
+       new_x=x-next_w;
+       new_y=y+h*r_dir;
+       break;
+     case 'E':
+       new_x=x+w;
+       new_y=y+h*r_dir;
+       break;
+    }
+    traverse_genome(p,p_index,next_index,new_x,new_y);
+  }
+  std::cout<<x<<" "<<y<<" "<<w<<" "<<h<<std::endl;
+  cv::Rect r(x,y,w,h);
+  room_rects.push_back(r);
 }
+
 /*this is the image generator. it makes a graphical representation of a genome*/
 void generate_representation(Population& p, int index,bool save){
   std::cout<<"Making image..."<<std::endl;
   cv::Mat img(2000,2000, CV_8UC3, cv::Scalar(50,50,50)); //This will store the image
   int k;
 
+  visited.clear();
+  visited.resize(GENOME_SIZE);
+
   for(k=0;k<GENOME_SIZE;k++){
     if(p.population[index].genome[k].previous_room_index==-1){//room has no dependencies
-      traverse_genome(p,index,k);
+      traverse_genome(p,index,k,1000,1000);
     }
   }
-  //for(rectangle in room_rects){
-      //draw the rectangle
-  //}
+
+  for(k=0;k<room_rects.size();k++){
+      cv::Scalar color(color_pallete[k%color_pallete.size()]);
+      cv::rectangle(img,room_rects[k],color,5,8,0);
+  }
 
   print_genome(p.population[index]);
   cv::namedWindow( "window", CV_WINDOW_NORMAL );

@@ -229,27 +229,32 @@ double random_dim(char use){
   return 100;
 }
 
-//TODO: replace rand() with unidist
 void randomize_gene(Gene& g){
   //genes are essentially room definitions.
-  g.b_dir=B_DIR_OPTS[rand()%(B_DIR_OPTS_SIZE)];
+  g.b_dir=B_DIR_OPTS[(int)floor(unidist(B_DIR_OPTS_SIZE))];
   g.r_dir=unidist(2)-1;//random from -1 to 1
-  //g.next_room_index=rand()%GENOME_SIZE;
   g.width=random_dim(g.use);
   g.height=random_dim(g.use);
 }
 
-//TODO: better formatting
 void print_genome(Genome g){
   int i,j;
-  std::cout.precision(4);
-  std::cout.width(8);
   for(i=0;i<GENOME_SIZE;i++){
-    std::cout<<"\n\t"<<g.genome[i].use<<g.genome[i].b_dir<<"\t"<<g.genome[i].r_dir<<"\t[";
-    for(j=0;j<g.genome[i].next_room_index.size();j++){
-      std::cout<<g.genome[i].next_room_index[j]<<", ";
+    printf("\n\t%c%c %+.3f [",g.genome[i].use,g.genome[i].b_dir,g.genome[i].r_dir);
+    for(j=0;j<5;j++){
+      if(!g.genome[i].next_room_index.empty()){
+        if(j<g.genome[i].next_room_index.size()-1){
+          printf("%2d,",g.genome[i].next_room_index[j]);
+        }else if(j==g.genome[i].next_room_index.size()-1){
+          printf("%2d ",g.genome[i].next_room_index[j]);
+        }else{
+          printf("   ");
+        }
+      }else{
+        printf("   ");
+      }
     }
-    std::cout<<"]("<<g.genome[i].previous_room_index<<")\t"<<g.genome[i].width<<"\t"<<g.genome[i].height;
+    printf("] (%2d) %.3f x %.3f",g.genome[i].previous_room_index,g.genome[i].width,g.genome[i].height);
   }
   std::cout<<std::endl;
 }
@@ -397,9 +402,9 @@ double score(Genome& g){
 //The entire mutation step for the whole population
 void mutate(Population& p){
   int n,m,j,i;
-  n=rand()%p.population.size()*MUTATIONS_PER_10K/10000;//how many genomes to mutate
+  n=(int)floor(unidist(p.population.size()))*MUTATIONS_PER_10K/10000;//how many genomes to mutate
   for(i=0;i<n;i++){
-    m=rand()%MAX_MUTATIONS+1;//how many genes to mutate
+    m=(int)floor(unidist(MAX_MUTATIONS))+1;//how many genes to mutate
     for(j=0;j<m;j++){
       randomize_gene(p.population[i].genome[unidist(GENOME_SIZE)]);
     }

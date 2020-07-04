@@ -9,16 +9,14 @@
 
 #include <opencv2/opencv.hpp>
 
-//TODO: Score function needs more criteria
-
 /************************************CONSTANTS*********************************/
 const bool VERBOSE=true;//Set to true to print debug info
 const int UPDATE_INTERVAL=10;//how many generations between printing stats
 
 #define MUTATIONS_PER_10K 500
 #define MAX_MUTATIONS 1
-#define POPULATION_SIZE 1000
-#define MAX_GENERATIONS 100
+#define POPULATION_SIZE 10000
+#define MAX_GENERATIONS 1000
 #define NUM_PARENTS 3
 #define ZERO_CHANCE 0.000
 
@@ -35,13 +33,13 @@ const int ENSUITE_OPTS_MAX=3;
 
 /**********************************PARAMETERS**********************************/
 //This sets the types of rooms in the plan (e.g 2 bdr with kitchen and 2 wc)
-static const char CFG_TYPES_[]={'B','K','W','C'};
+static const char CFG_TYPES_[]={'B','B','M','K','T','T','W','C','L'};
 std::vector<char> CFG_TYPES;
 //this sets the connections of each room(is populated in init())
 std::vector<std::vector<int> > CFG_CONNS;
 
 //This one sets if you want ensuite (0) or not (1)
-static const char CFG_ENSUITE_[]={1,1,1,1};
+static const char CFG_ENSUITE_[]={1,1,1,1,1,1,1,1,1};
 std::vector<char> CFG_ENSUITE;
 /******************************************************************************/
 
@@ -53,6 +51,10 @@ std::normal_distribution<> rand_norm(0,1);
 int GENOME_SIZE;
 std::map<char,double> mean_aspect;
 std::map<char,double> std_aspect;
+const double mean_room=10;
+const double std_room=2;
+const double mean_mbr=14;
+const double std_mbr=2;
 
 std::vector<cv::Scalar> color_pallete;
 /******************************************************************************/
@@ -287,22 +289,38 @@ void init(){
 
   std::vector<int> tmpconn;
   CFG_CONNS.resize(GENOME_SIZE);
-  //('B','K','W','C')
-  tmpconn.push_back(3);//connect bedroom to covered veranda
+  //'B','B','M','K','T','T','W','C','L'};
   CFG_CONNS[0]=tmpconn;
-  tmpconn.clear();
-  std::cout<<"segfault"<<std::endl;
 
-  //connect kitchen to nothing
   CFG_CONNS[1]=tmpconn;
 
-  tmpconn.push_back(0);//connect walkway to bedroom
-  tmpconn.push_back(1);//and kitchen
+
+
+  tmpconn.push_back(7);//connect master bedroom to covered veranda
+  tmpconn.push_back(5);//and toilet
   CFG_CONNS[2]=tmpconn;
   tmpconn.clear();
 
-  //connect veranda to nothing
+  //connect kitchen to nothing
   CFG_CONNS[3]=tmpconn;
+  //connect toilet to nothing
+  CFG_CONNS[4]=tmpconn;
+  //connect toilet to nothing
+  CFG_CONNS[5]=tmpconn;
+
+  tmpconn.push_back(0);//connect walkway to bedroom
+  tmpconn.push_back(1);//and bedroom
+  tmpconn.push_back(2);//and master bedroom
+    tmpconn.push_back(8);//connect living room to toilet
+  CFG_CONNS[6]=tmpconn;
+  tmpconn.clear();
+
+  //connect veranda to nothing
+  CFG_CONNS[7]=tmpconn;
+
+  tmpconn.push_back(4);//connect living room to toilet
+    tmpconn.push_back(3);//connect living room to kitchen
+  CFG_CONNS[8]=tmpconn;
 
   //'B','M','K','S','L','C','U','O','W','T'
   mean_aspect['B']=1;
@@ -366,6 +384,7 @@ double score(Genome& g){
   double score=0;
     //Room aspect ratio increases score as it reaches a constant (propose 1.1)
   double room_aspect,z_aspect;
+  double m,s;
   int i;
   for(i=0;i<GENOME_SIZE;i++){
     if(g.genome[i].width<g.genome[i].height){
@@ -374,8 +393,8 @@ double score(Genome& g){
       room_aspect=g.genome[i].height/g.genome[i].width;
     }
     //Calculate the z-score of this aspect ratio (assuming normdist)
-    double m=mean_aspect[g.genome[i].use];
-    double s=std_aspect[g.genome[i].use];
+    m=mean_aspect[g.genome[i].use];
+    s=std_aspect[g.genome[i].use];
     z_aspect=(room_aspect-m)/s+1;//x of normdist graph
     z_aspect=z_aspect*exp(-0.5*((z_aspect-m)/s)*((z_aspect-m)/s));//y
     if(VERBOSE){
@@ -389,13 +408,46 @@ double score(Genome& g){
       score=0;
     }
   }
-  score/=GENOME_SIZE;//normalize so that final score max=1
+
 
   //Bedroom area increases score up to a point
+  double bedroom_area;
+  int n_rooms=0;
+  for(i=0;i<GENOME_SIZE;i++){
+    if(g.genome[i].use=='B'){
+      ++n_rooms;
+      bedroom_area=g.genome[i].height*g.genome[i].width;
+      m=mean_room;
+      s=std_room;
+    }else if(g.genome[i].use=='M'){
+      ++n_rooms;
+      m=mean_mbr;
+      s=std_mbr;
+      bedroom_area=g.genome[i].height*g.genome[i].width;
+    }
+
+    z_aspect=(bedroom_area-m)/s+1;//x of normdist graph
+    z_aspect=z_aspect*exp(-0.5*((bedroom_area-m)/s)*((bedroom_area-m)/s));//y
+    score+=z_aspect;
+  }
+
   //Walkway area decreases score
-  //more MORE MOOOOOOOOOOARRRRRRRRRRRR
-  // dont forget to score/=num_of_criteria;
-  score/=1;
+  for(i=0;i<GENOME_SIZE;i++){
+    if(g.genome[i].use=='W'){
+      bedroom_area=g.genome[i].height*g.genome[i].width;
+    }
+    score-=bedroom_area/10;
+  }
+
+  //
+  for(i=0;i<GENOME_SIZE;i++){
+    m=0.5;
+    s=0.1;
+    bedroom_area=g.genome[i].r_dir;
+        z_aspect=(bedroom_area-m)/s+1;//x of normdist graph
+        z_aspect=z_aspect*exp(-0.5*((bedroom_area-m)/s)*((bedroom_area-m)/s));//y
+    score+=z_aspect;
+  }
   return score;
 }
 

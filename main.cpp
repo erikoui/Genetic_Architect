@@ -15,8 +15,8 @@ const int UPDATE_INTERVAL=10;//how many generations between printing stats
 
 #define MUTATIONS_PER_10K 500
 #define MAX_MUTATIONS 1
-#define POPULATION_SIZE 10000
-#define MAX_GENERATIONS 1000
+#define POPULATION_SIZE 5000
+#define MAX_GENERATIONS 100
 #define NUM_PARENTS 3
 #define ZERO_CHANCE 0.000
 
@@ -604,6 +604,7 @@ void draw_room_and_move(cv::Mat& img,Population& p,int p_index,int g_index,int p
 
 std::vector<cv::Rect> room_rects;
 std::vector<bool> visited;
+std::vector<cv::String> room_uses;
 //this fills room_rects, which can also be used to get distances between rooms.
 void traverse_genome(Population& p,int p_index,int root_node,double x,double y){
   if(visited[root_node]){
@@ -643,9 +644,11 @@ void traverse_genome(Population& p,int p_index,int root_node,double x,double y){
     }
     traverse_genome(p,p_index,next_index,new_x,new_y);
   }
+  char u=p.population[p_index].genome[root_node].use;
   std::cout<<x<<" "<<y<<" "<<w<<" "<<h<<std::endl;
   cv::Rect r(x,y,w,h);
   room_rects.push_back(r);
+  room_uses.push_back(cv::String(1,u));
 }
 
 /*this is the image generator. it makes a graphical representation of a genome*/
@@ -666,6 +669,7 @@ void generate_representation(Population& p, int index,bool save){
   for(k=0;k<room_rects.size();k++){
       cv::Scalar color(color_pallete[k%color_pallete.size()]);
       cv::rectangle(img,room_rects[k],color,5,8,0);
+      cv::putText(img, room_uses[k], cv::Point(room_rects[k].x+room_rects[k].width/2,room_rects[k].y+room_rects[k].height/2), cv::FONT_HERSHEY_DUPLEX, /*size=*/2.0, color,2);
   }
 
   print_genome(p.population[index]);
